@@ -23,12 +23,55 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Catalog {
 
+    // TODO: pay attention to Threadsafe
+
+    private static class Table {
+
+        private int id;
+        private DbFile dbfile;
+        private String tableName;
+        private String pkeyField;
+        private TupleDesc tupleDesc;
+
+        public Table(int id, DbFile dbfile, String tableName, String pkeyField, TupleDesc tableSchema) {
+            this.id = id;
+            this.dbfile = dbfile;
+            this.tableName = tableName;
+            this.pkeyField = pkeyField;
+            this.tupleDesc = tableSchema;
+        }
+
+        public int getId() {
+            return id;
+        }
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        public String getPkeyField() {
+            return pkeyField;
+        }
+
+        public TupleDesc getTupleDesc() {
+            return tupleDesc;
+        }
+
+        public DbFile getDbfile() {
+            return dbfile;
+        }
+    }
+
+    private Map<Integer, Table> id2TableMap;
+    private Map<String, Table> name2TableMap;
+
     /**
      * Constructor.
      * Creates a new, empty catalog.
      */
     public Catalog() {
-        // some code goes here
+        id2TableMap = new ConcurrentHashMap<>();
+        name2TableMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -42,6 +85,11 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
+        Table tb = new Table(file.getId(), file, name, pkeyField, file.getTupleDesc());
+        id2TableMap.put(file.getId(), tb);
+        if (name != null) {
+            name2TableMap.put(name, tb);
+        }
     }
 
     public void addTable(DbFile file, String name) {
@@ -65,7 +113,14 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-        return 0;
+        if (name == null) {
+            throw new NoSuchElementException();
+        }
+        Table tb = name2TableMap.get(name);
+        if (tb == null) {
+            throw new NoSuchElementException();
+        }
+        return tb.getId();
     }
 
     /**
@@ -76,7 +131,11 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        Table tb = id2TableMap.get(tableid);
+        if (tb == null) {
+            throw new NoSuchElementException();
+        }
+        return tb.getTupleDesc();
     }
 
     /**
@@ -87,27 +146,50 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        Table tb = id2TableMap.get(tableid);
+        if (tb == null) {
+            throw new NoSuchElementException();
+        }
+        return tb.getDbfile();
     }
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        return null;
+        Table tb = id2TableMap.get(tableid);
+        if (tb == null) {
+            throw new NoSuchElementException();
+        }
+        return tb.getPkeyField();
     }
 
     public Iterator<Integer> tableIdIterator() {
         // some code goes here
-        return null;
+        // TODO: fix this with FP
+        List<Integer> ret = new LinkedList<>();
+        for (Table tb : id2TableMap.values()) {
+            ret.add(tb.id);
+        }
+        return ret.iterator();
     }
 
     public String getTableName(int id) {
         // some code goes here
-        return null;
+        Table tb = id2TableMap.get(id);
+        if (tb == null) {
+            throw new NoSuchElementException();
+        }
+        return tb.getTableName();
     }
     
     /** Delete all tables from the catalog */
+    // TODO: might have threadsafe issue here.
+    //   But the class doesn't specify what its threadsafe definition & pre/post-condition,
+    //   so i don't know what to do so far.
+    //   Also, I really don't wanna put "synchronized" keyword everywhere
+    //   maybe i will fix this later
     public void clear() {
-        // some code goes here
+        id2TableMap.clear();
+        name2TableMap.clear();
     }
     
     /**
