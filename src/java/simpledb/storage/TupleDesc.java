@@ -36,6 +36,14 @@ public class TupleDesc implements Serializable {
         public String toString() {
             return fieldName + "(" + fieldType + ")";
         }
+
+        public String getFieldName() {
+            return fieldName;
+        }
+
+        public Type getFieldType() {
+            return fieldType;
+        }
     }
 
     List<TDItem> itemList;
