@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import javafx.util.Pair;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
@@ -9,6 +10,10 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -22,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * @Threadsafe, all fields are final
  */
+// TODO: should i put synchronized everywhere?
 public class BufferPool {
     /** Bytes per page, including header. */
     private static final int DEFAULT_PAGE_SIZE = 4096;
@@ -33,6 +39,11 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    private final int maxPageNumber;
+    private final List<Page> pageList;
+    private final Map<PageId, Page> pageId2PageMap;
+    private final Map<PageId, Pair<TransactionId, Permissions>> pageId2TxPermissionMap;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -40,6 +51,10 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        maxPageNumber = numPages;
+        pageList = new LinkedList<>();
+        pageId2PageMap = new HashMap<>();
+        pageId2TxPermissionMap = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -71,10 +86,26 @@ public class BufferPool {
      * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+        // FIXME: the same tid request with different permission level
+        if (pageId2PageMap.containsKey(pid)) {
+            pageId2TxPermissionMap.put(pid, new Pair<>(tid, perm));
+            return pageId2PageMap.get(pid);
+        } else {
+            if (pageList.size() >= maxPageNumber) {
+                // TODO: evict policy
+                throw new DbException("The buffer pool is full and tHe evict policy of bufferpool hasn't been implemented yet.");
+            } else {
+                DbFile dbfile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                Page newPage = dbfile.readPage(pid);
+                pageList.add(newPage);
+                pageId2PageMap.put(pid, newPage);
+                pageId2TxPermissionMap.put(pid, new Pair<>(tid, perm));
+                return newPage;
+            }
+        }
     }
 
     /**
