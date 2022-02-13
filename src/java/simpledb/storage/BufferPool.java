@@ -90,6 +90,7 @@ public class BufferPool {
         throws TransactionAbortedException, DbException {
         // some code goes here
         // FIXME: the same tid request with different permission level
+        //    Also, the same page might be requested by multiple transaction
         if (pageId2PageMap.containsKey(pid)) {
             pageId2TxPermissionMap.put(pid, new Pair<>(tid, perm));
             return pageId2PageMap.get(pid);

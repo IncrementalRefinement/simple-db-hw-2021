@@ -109,4 +109,8 @@ public abstract class Operator implements OpIterator {
         this.estimatedCardinality = card;
     }
 
+    public boolean isOpen() {
+        return this.open;
+    }
+
 }
