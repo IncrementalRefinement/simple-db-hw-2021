@@ -96,11 +96,7 @@ public class AbstractAggregator implements Aggregator {
                 aggregateValue = Math.max(aggregateValue, currentValue);
                 break;
             }
-            case AVG: {
-                aggregateValue = (aggregateValue * gbCountMap.get(key) + currentValue) / (gbCountMap.get(key) + 1);
-                break;
-            }
-            case SUM: {
+            case AVG: case SUM: {
                 aggregateValue += currentValue;
                 break;
             }
@@ -130,7 +126,14 @@ public class AbstractAggregator implements Aggregator {
 
         if (gbfield == NO_GROUPING) {
             Tuple onlyTuple = new Tuple(tupleDesc);
-            onlyTuple.setField(GROUP_VALUE_INDEX, new IntField(gbMap.get(DEFAULT_KEY)));
+            IntField valueField;
+            if (this.what == Op.AVG) {
+                int value = gbMap.get(DEFAULT_KEY) / gbCountMap.get(DEFAULT_KEY);
+                valueField = new IntField(value);
+            } else {
+                valueField = new IntField(gbMap.get(DEFAULT_KEY));
+            }
+            onlyTuple.setField(GROUP_VALUE_INDEX, valueField);
             tuples.add(onlyTuple);
         } else {
             for (Map.Entry<String, Integer> entry : gbMap.entrySet()) {
@@ -142,8 +145,12 @@ public class AbstractAggregator implements Aggregator {
                 } else {
                     groupField = new StringField(entry.getKey(), entry.getKey().length());
                 }
-
-                valueField = new IntField(entry.getValue());
+                if (this.what == Op.AVG) {
+                    int value = entry.getValue() / gbCountMap.get(entry.getKey());
+                    valueField = new IntField(value);
+                } else {
+                    valueField = new IntField(entry.getValue());
+                }
                 entryTuple.setField(GROUP_VALUE_INDEX, groupField);
                 entryTuple.setField(AGGREGATE_VALUE_INDEX, valueField);
                 tuples.add(entryTuple);
@@ -151,5 +158,9 @@ public class AbstractAggregator implements Aggregator {
         }
 
         return new TupleIterator(tupleDesc, tuples);
+    }
+
+    public TupleDesc getTupleDesc() {
+        return this.tupleDesc;
     }
 }
