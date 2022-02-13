@@ -8,8 +8,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-public class AbstractAggregator implements Aggregator {
+// FIXME: refactor this disgusting shit(especially the disaster if-else clause)
 
+public class AbstractAggregator implements Aggregator {
     private final static String DEFAULT_KEY = "DEFAULT_KEY";
 
     private final int gbfield;
