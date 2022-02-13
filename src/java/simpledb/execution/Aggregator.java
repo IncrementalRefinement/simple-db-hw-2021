@@ -11,6 +11,8 @@ import java.io.Serializable;
  */
 public interface Aggregator extends Serializable {
     int NO_GROUPING = -1;
+    int GROUP_VALUE_INDEX = 0;
+    int AGGREGATE_VALUE_INDEX = 1;
 
     /**
      * SUM_COUNT and SC_AVG will
