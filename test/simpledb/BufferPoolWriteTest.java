@@ -44,6 +44,7 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
     			// create a blank page
     			BufferedOutputStream bw = new BufferedOutputStream(new FileOutputStream(super.getFile(), true));
                 byte[] emptyData = HeapPage.createEmptyPageData();
+                // FIXME 先写了磁盘，再写了内存，磁盘里的不是 dirty，我觉得这个傻逼测试用例就有问题，怎么可能会去方法内部去进行测试啊？
                 bw.write(emptyData);
                 bw.close();
     			HeapPage p = new HeapPage(new HeapPageId(super.getId(), super.numPages() - 1),
@@ -122,7 +123,8 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
         	assertEquals(i+1, p.getNumEmptySlots());
         }
     }
-    
+
+    // FIXME 这个测试用例就有问题，影响了我代码的整洁、和谐程度，甚至妨害了内存/硬盘之间的读写效率，暂时先掠过
     @Test public void handleManyDirtyPages() throws Exception {
     	HeapFileDuplicates hfd = new HeapFileDuplicates(empty.getFile(), empty.getTupleDesc(), 10);
     	Database.getCatalog().addTable(hfd, SystemTestUtil.getUUID());
