@@ -73,7 +73,7 @@ public class Utility {
      */
     public static Tuple getHeapTuple(int n, int width) {
         Tuple tup = new Tuple(getTupleDesc(width));
-        tup.setRecordId(new RecordId(new HeapPageId(1, 2), 3));
+        tup.setRecordId(new RecordId(new HeapPageId(1, 2), 3)); // FIXME ???????????? table id == 1?
         for (int i = 0; i < width; ++i)
             tup.setField(i, new IntField(n));
         return tup;

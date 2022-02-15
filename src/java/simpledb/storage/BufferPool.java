@@ -42,6 +42,7 @@ public class BufferPool {
     private final int maxPageNumber;
     private final List<Page> pageList;
     private final Map<PageId, Page> pageId2PageMap;
+    // FIXME: multiple TX require the same page issue
     private final Map<PageId, Pair<TransactionId, Permissions>> pageId2TxPermissionMap;
 
     /**
@@ -171,6 +172,12 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        // TODO: what if page size of one insertion exceeds the max capacity of bufferpool?
+        HeapFile theFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        List<Page> dirtyPages = theFile.insertTuple(tid, t);
+        for (Page dirtyPage : dirtyPages) {
+            dirtyPage.markDirty(true, tid);
+        }
     }
 
     /**
@@ -186,10 +193,13 @@ public class BufferPool {
      * @param tid the transaction deleting the tuple.
      * @param t the tuple to delete
      */
-    public  void deleteTuple(TransactionId tid, Tuple t)
+    public void deleteTuple(TransactionId tid, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        HeapPage thePage = (HeapPage) getPage(tid, t.getRecordId().getPageId(), Permissions.READ_WRITE);
+        thePage.deleteTuple(t);
+        thePage.markDirty(true, tid);
     }
 
     /**

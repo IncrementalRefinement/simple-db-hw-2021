@@ -14,6 +14,7 @@ public class Tuple implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private TupleDesc tupleDesc;
+    // FIXME: 一个很需要注意的点是 Tuple 的 RecordId 是可以为 null 的(比如一个tuple刚生成，还没有和表相关联的时候，所以非必要不能依赖 Tuple 来获得 RecordId)
     private RecordId recordId;
     private Field[] fields;
 
