@@ -62,16 +62,16 @@ public class Catalog {
         }
     }
 
-    private Map<Integer, Table> id2TableMap;
-    private Map<String, Table> name2TableMap;
+    private Map<Integer, Table> tableID2TableMap;
+    private Map<String, Table> tablename2TableMap;
 
     /**
      * Constructor.
      * Creates a new, empty catalog.
      */
     public Catalog() {
-        id2TableMap = new ConcurrentHashMap<>();
-        name2TableMap = new ConcurrentHashMap<>();
+        tableID2TableMap = new ConcurrentHashMap<>();
+        tablename2TableMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -86,9 +86,9 @@ public class Catalog {
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
         Table tb = new Table(file.getId(), file, name, pkeyField, file.getTupleDesc());
-        id2TableMap.put(file.getId(), tb);
+        tableID2TableMap.put(file.getId(), tb);
         if (name != null) {
-            name2TableMap.put(name, tb);
+            tablename2TableMap.put(name, tb);
         }
     }
 
@@ -116,7 +116,7 @@ public class Catalog {
         if (name == null) {
             throw new NoSuchElementException();
         }
-        Table tb = name2TableMap.get(name);
+        Table tb = tablename2TableMap.get(name);
         if (tb == null) {
             throw new NoSuchElementException();
         }
@@ -131,7 +131,7 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        Table tb = id2TableMap.get(tableid);
+        Table tb = tableID2TableMap.get(tableid);
         if (tb == null) {
             throw new NoSuchElementException();
         }
@@ -146,7 +146,7 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        Table tb = id2TableMap.get(tableid);
+        Table tb = tableID2TableMap.get(tableid);
         if (tb == null) {
             throw new NoSuchElementException();
         }
@@ -155,7 +155,7 @@ public class Catalog {
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        Table tb = id2TableMap.get(tableid);
+        Table tb = tableID2TableMap.get(tableid);
         if (tb == null) {
             throw new NoSuchElementException();
         }
@@ -166,7 +166,7 @@ public class Catalog {
         // some code goes here
         // TODO: fix this with FP
         List<Integer> ret = new LinkedList<>();
-        for (Table tb : id2TableMap.values()) {
+        for (Table tb : tableID2TableMap.values()) {
             ret.add(tb.id);
         }
         return ret.iterator();
@@ -174,7 +174,7 @@ public class Catalog {
 
     public String getTableName(int id) {
         // some code goes here
-        Table tb = id2TableMap.get(id);
+        Table tb = tableID2TableMap.get(id);
         if (tb == null) {
             throw new NoSuchElementException();
         }
@@ -188,8 +188,8 @@ public class Catalog {
     //   Also, I really don't wanna put "synchronized" keyword everywhere
     //   maybe i will fix this later
     public void clear() {
-        id2TableMap.clear();
-        name2TableMap.clear();
+        tableID2TableMap.clear();
+        tablename2TableMap.clear();
     }
     
     /**
