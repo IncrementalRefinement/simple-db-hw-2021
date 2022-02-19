@@ -259,6 +259,7 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        // TODO: the eviction policy is really naive and ineffective, refine this when necessary!
         Page chosenPage = pageList.get(0);
         if (chosenPage.isDirty() != null) {
             try {
