@@ -43,7 +43,7 @@ public class BufferPool {
     private final List<Page> pageList;
     private final Map<PageId, Page> pageId2PageMap;
     // FIXME: multiple TX require the same page issue
-    private final Map<PageId, Pair<TransactionId, Permissions>> pageId2TxPermissionMap;
+    private final Map<PageId, Map<TransactionId, Permissions>> pageId2TxPermissionMap;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -93,7 +93,8 @@ public class BufferPool {
         // FIXME: the same tid request with different permission level
         //    Also, the same page might be requested by multiple transaction
         if (pageId2PageMap.containsKey(pid)) {
-            pageId2TxPermissionMap.put(pid, new Pair<>(tid, perm));
+            pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
+            pageId2TxPermissionMap.get(pid).put(tid, perm);
             return pageId2PageMap.get(pid);
         } else {
             if (pageList.size() >= maxPageNumber) {
@@ -104,7 +105,8 @@ public class BufferPool {
                 Page newPage = dbfile.readPage(pid);
                 pageList.add(newPage);
                 pageId2PageMap.put(pid, newPage);
-                pageId2TxPermissionMap.put(pid, new Pair<>(tid, perm));
+                pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
+                pageId2TxPermissionMap.get(pid).put(tid, perm);
                 return newPage;
             }
         }
