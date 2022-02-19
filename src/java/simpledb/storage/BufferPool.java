@@ -10,10 +10,7 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -42,8 +39,8 @@ public class BufferPool {
     private final int maxPageNumber;
     private final List<Page> pageList;
     private final Map<PageId, Page> pageId2PageMap;
-    // FIXME: multiple TX require the same page issue
     private final Map<PageId, Map<TransactionId, Permissions>> pageId2TxPermissionMap;
+    private final Map<TransactionId, Set<PageId>> txID2PageIdMap;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -56,6 +53,7 @@ public class BufferPool {
         pageList = new LinkedList<>();
         pageId2PageMap = new HashMap<>();
         pageId2TxPermissionMap = new HashMap<>();
+        txID2PageIdMap = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -93,22 +91,18 @@ public class BufferPool {
         // FIXME: the same tid request with different permission level
         //    Also, the same page might be requested by multiple transaction
         if (pageId2PageMap.containsKey(pid)) {
-            pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
-            pageId2TxPermissionMap.get(pid).put(tid, perm);
+            addTransactionPageRelation(tid, pid, perm);
             return pageId2PageMap.get(pid);
         } else {
-            if (pageList.size() >= maxPageNumber) {
-                // TODO: evict policy
-                throw new DbException("The buffer pool is full and tHe evict policy of bufferpool hasn't been implemented yet.");
-            } else {
-                DbFile dbfile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-                Page newPage = dbfile.readPage(pid);
-                pageList.add(newPage);
-                pageId2PageMap.put(pid, newPage);
-                pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
-                pageId2TxPermissionMap.get(pid).put(tid, perm);
-                return newPage;
+            while (pageList.size() >= maxPageNumber) {
+               evictPage();
             }
+            DbFile dbfile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            Page newPage = dbfile.readPage(pid);
+            pageList.add(newPage);
+            pageId2PageMap.put(pid, newPage);
+            addTransactionPageRelation(tid, pid, perm);
+            return newPage;
         }
     }
 
@@ -212,7 +206,9 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-
+        for (Page page : pageList) {
+            flushPage(page.getId());
+        }
     }
 
     /** Remove the specific page id from the buffer pool.
@@ -226,6 +222,13 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        Page thePage = pageId2PageMap.get(pid);
+        pageList.remove(thePage);
+        pageId2PageMap.remove(pid);
+        for (TransactionId txID : pageId2TxPermissionMap.get(pid).keySet()) {
+            txID2PageIdMap.get(txID).remove(pid);
+        }
+        pageId2TxPermissionMap.remove(pid);
     }
 
     /**
@@ -235,6 +238,8 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+        file.writePage(pageId2PageMap.get(pid));
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -242,6 +247,9 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (PageId pageId : txID2PageIdMap.get(tid)) {
+            flushPage(pageId);
+        }
     }
 
     /**
@@ -251,6 +259,22 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        Page chosenPage = pageList.get(0);
+        if (chosenPage.isDirty() != null) {
+            try {
+                flushPage(chosenPage.getId());
+            } catch (IOException e) {
+                // FIXME
+                throw new RuntimeException();
+            }
+        }
+        discardPage(chosenPage.getId());
     }
 
+    private void addTransactionPageRelation(TransactionId tid, PageId pid, Permissions perm) {
+        pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
+        pageId2TxPermissionMap.get(pid).put(tid, perm);
+        txID2PageIdMap.computeIfAbsent(tid, k -> new HashSet<>());
+        txID2PageIdMap.get(tid).add(pid);
+    }
 }
