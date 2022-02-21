@@ -1,10 +1,17 @@
 package simpledb.optimizer;
 
 import simpledb.execution.Predicate;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 /** A class to represent a fixed-width histogram over a single integer-based field.
  */
 public class IntHistogram {
+
+    private final int[] buckets;
+    private long totalNum;
+    private final int min;
+    private final int max;
+    private final double bucketGap;
 
     /**
      * Create a new IntHistogram.
@@ -24,6 +31,11 @@ public class IntHistogram {
      */
     public IntHistogram(int buckets, int min, int max) {
     	// some code goes here
+        this.buckets = new int[buckets];
+        this.min = min;
+        this.max = max;
+        this.totalNum = 0;
+        this.bucketGap = (max - min) / (double) buckets;
     }
 
     /**
@@ -32,6 +44,11 @@ public class IntHistogram {
      */
     public void addValue(int v) {
     	// some code goes here
+        if (v > max || v < min) {
+            return;
+        }
+        buckets[getBucketIndex(v)] += 1;
+        totalNum++;
     }
 
     /**
@@ -45,9 +62,53 @@ public class IntHistogram {
      * @return Predicted selectivity of this particular operator and value
      */
     public double estimateSelectivity(Predicate.Op op, int v) {
-
-    	// some code goes here
-        return -1.0;
+        // some code goes here
+        double ret;
+        switch (op) {
+            case EQUALS: {
+                if (v < min || v > max) return 0;
+                int index = getBucketIndex(v);
+                ret = buckets[index] / bucketGap / totalNum;
+                break;
+            }
+            case GREATER_THAN: {
+                if (v < min) {
+                    ret = 1;
+                    break;
+                } else if (v > max) {
+                    ret = 0;
+                    break;
+                }
+                int index = getBucketIndex(v);
+                double prat_num = 0;
+                prat_num += ((index + 1) * bucketGap + min - v) / bucketGap * buckets[index];
+                for (int i = index + 1; i < buckets.length; i++) {
+                    prat_num += buckets[i];
+                }
+                ret = prat_num / totalNum;
+                break;
+            }
+            case LESS_THAN: {
+                ret = 1 - estimateSelectivity(Predicate.Op.GREATER_THAN, v) - estimateSelectivity(Predicate.Op.EQUALS, v);
+                break;
+            }
+            case LESS_THAN_OR_EQ: {
+                ret = 1 - estimateSelectivity(Predicate.Op.GREATER_THAN, v);
+                break;
+            }
+            case GREATER_THAN_OR_EQ: {
+                ret = estimateSelectivity(Predicate.Op.EQUALS, v) + estimateSelectivity(Predicate.Op.GREATER_THAN, v);
+                break;
+            }
+            case NOT_EQUALS: {
+                ret = 1 - estimateSelectivity(Predicate.Op.EQUALS, v);
+                break;
+            }
+            default: {
+                throw new NotImplementedException();
+            }
+        }
+        return ret;
     }
     
     /**
@@ -61,7 +122,7 @@ public class IntHistogram {
     public double avgSelectivity()
     {
         // some code goes here
-        return 1.0;
+        return totalNum / (double) (max - min);
     }
     
     /**
@@ -69,6 +130,14 @@ public class IntHistogram {
      */
     public String toString() {
         // some code goes here
-        return null;
+        return super.toString();
+    }
+
+    private int getBucketIndex(int v) {
+        int index = (int)((v - min) / bucketGap);
+        if (index == buckets.length) {
+            index--;
+        }
+        return index;
     }
 }
