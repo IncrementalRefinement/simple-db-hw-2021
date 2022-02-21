@@ -5,6 +5,10 @@ import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 /** A class to represent a fixed-width histogram over a single integer-based field.
  */
+
+// FIXME: 两个问题
+//    1. 如果max和min之间的int可能数量正好能被bucket整除(不一定，可能是相等)时(比如 min = 1, max = 10, buckets = 10)，此时gap应该选为 1，但是这里选择了9
+//    2. buckets 数量过大时可能导致数组中的很大一部分都是 0
 public class IntHistogram {
 
     private final int[] buckets;
@@ -31,6 +35,7 @@ public class IntHistogram {
      */
     public IntHistogram(int buckets, int min, int max) {
     	// some code goes here
+        buckets = Math.min(buckets, max - min); // make vector not sparse
         this.buckets = new int[buckets];
         this.min = min;
         this.max = max;
@@ -107,6 +112,11 @@ public class IntHistogram {
             default: {
                 throw new NotImplementedException();
             }
+        }
+        if (ret < 0) {
+            ret = 0;
+        } else if (ret > 1) {
+            ret = 1;
         }
         return ret;
     }
