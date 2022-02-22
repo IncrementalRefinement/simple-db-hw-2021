@@ -132,7 +132,9 @@ public class IntHistogram {
     public double avgSelectivity()
     {
         // some code goes here
-        return totalNum / (double) (max - min);
+        // return totalNum / (double) (max - min);
+        // TODO: not sure  whether this is right
+        return 0.0;
     }
     
     /**
