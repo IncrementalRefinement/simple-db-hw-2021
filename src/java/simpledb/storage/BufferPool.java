@@ -1,6 +1,5 @@
 package simpledb.storage;
 
-import javafx.util.Pair;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
