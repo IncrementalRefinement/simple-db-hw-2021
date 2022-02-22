@@ -178,14 +178,12 @@ public class JoinOptimizer {
         // TODO: 说实话，我没看懂
         int card = 1;
         if (joinOp == Predicate.Op.EQUALS) {
-            if (t1pkey && t2pkey) {
-                card = Math.min(card1, card2);
-            } else if (t1pkey) {
+            if (t1pkey) {
                 card = card2;
             } else if (t2pkey){
                 card = card1;
             } else {
-                card = card1 * card2;
+                card = Math.min(card1, card2);
             }
         } else {
             card = (int) (card1 * card2 * 0.3);
@@ -249,10 +247,39 @@ public class JoinOptimizer {
             Map<String, TableStats> stats,
             Map<String, Double> filterSelectivities, boolean explain)
             throws ParsingException {
-
         // some code goes here
         //Replace the following
-        return joins;
+        PlanCache planCache = new PlanCache();
+        assert stats.size() == filterSelectivities.size();
+        int size = stats.size();
+        for (int i = 1; i <= size; i++) {
+            Set<Set<LogicalJoinNode>> subsets = enumerateSubsets(joins, i);
+            for (Set<LogicalJoinNode> theSubset : subsets) {
+                CostCard bestPlan = null;
+                for (LogicalJoinNode joinToRemove : theSubset) {
+                    CostCard thisCostCard = computeCostAndCardOfSubplan(stats, filterSelectivities, joinToRemove, theSubset, bestPlan == null ? Double.MAX_VALUE : bestPlan.cost, planCache);
+                    if (thisCostCard == null) {
+                        continue;
+                    } else {
+                        if (bestPlan == null) {
+                            bestPlan = thisCostCard;
+                        } else {
+                            if (thisCostCard.cost < bestPlan.cost) {
+                                bestPlan = thisCostCard;
+                            }
+                        }
+                    }
+                }
+                if (bestPlan != null) {
+                    planCache.addPlan(theSubset, bestPlan.cost, bestPlan.card, bestPlan.plan);
+                }
+            }
+        }
+        List<LogicalJoinNode> ret =  planCache.getOrder(new HashSet<>(joins));
+        if (explain) {
+            printJoins(ret, planCache, stats, filterSelectivities);
+        }
+        return ret;
     }
 
     // ===================== Private Methods =================================

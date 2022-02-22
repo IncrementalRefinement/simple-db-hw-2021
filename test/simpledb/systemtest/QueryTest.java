@@ -34,7 +34,8 @@ public class QueryTest {
         HeapFileEncoder.convert(tuples, temp, BufferPool.getPageSize(), columns);
         return Utility.openHeapFile(columns, colPrefix, temp);
 	}
-	
+
+	// FIXME: timeout, refine the JoinOptimizer please, or might be disk issue.....
 	@Test(timeout=20000) public void queryTest() throws IOException {
 		// This test is intended to approximate the join described in the
 		// "Query Planning" section of 2009 Quiz 1,
