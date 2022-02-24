@@ -161,6 +161,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
    * Unit test for BufferPool.getPage() assuming locking.
    * Attempt lock upgrade.
    */
+  // 问题出在这里，数据库以 TXid 来区分并发单元，而 ReadWriteLock 以线程来区分
   @Test public void lockUpgrade() throws Exception {
     metaLockTester(tid1, p0, Permissions.READ_ONLY,
                    tid1, p0, Permissions.READ_WRITE, true);
@@ -173,6 +174,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
    * A single transaction should be able to acquire a read lock after it
    * already has a write lock.
    */
+  // AKA. Downgrade or just kept the rw lock?
   @Test public void acquireWriteAndReadLocks() throws Exception {
     metaLockTester(tid1, p0, Permissions.READ_WRITE,
                    tid1, p0, Permissions.READ_ONLY, true);
