@@ -120,7 +120,6 @@ public class HeapFile implements DbFile {
         List<Page> dirtyPages = new ArrayList<>();
         boolean hasEmptySlot = false;
         for (int pageNumber = 0; pageNumber < numPages(); pageNumber++) {
-            // FIXME: 此处的 pageID 是从 tuple 里面捞出来的，但是 pageID 的 tableID 还可以从当前 HeapFile#getID() 生成
             PageId thePageID = new HeapPageId(getId(), pageNumber);
             HeapPage thePage = (HeapPage) Database.getBufferPool().getPage(tid, thePageID, Permissions.READ_WRITE);
             if (thePage.getNumEmptySlots() > 0) {
@@ -133,6 +132,7 @@ public class HeapFile implements DbFile {
 
         if (!hasEmptySlot) {
             // create a new page and write the new page into disk
+            // FIXME: concurrency here
             byte[] data = HeapPage.createEmptyPageData();
             HeapPageId newPageID = new HeapPageId(getId(), numPages());
             HeapPage newPage = new HeapPage(newPageID, data);
