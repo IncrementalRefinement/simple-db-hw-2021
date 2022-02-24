@@ -41,6 +41,7 @@ public class BufferPool {
     private final Map<PageId, Page> pageId2PageMap;
     // private final Map<PageId, Map<TransactionId, Permissions>> pageId2TxPermissionMap;
     private final Map<TransactionId, Set<PageId>> txID2PageIdMap;
+    private final Map<PageId, Set<TransactionId>> pageID2txIDMap;
     private final LockManager lockManager;
 
     /**
@@ -55,6 +56,7 @@ public class BufferPool {
         pageId2PageMap = new HashMap<>();
         // pageId2TxPermissionMap = new HashMap<>();
         txID2PageIdMap = new HashMap<>();
+        pageID2txIDMap = new HashMap<>();
         lockManager = new LockManager();
     }
     
@@ -253,6 +255,7 @@ public class BufferPool {
         // not necessary for lab1|lab2
         for (PageId pageId : txID2PageIdMap.get(tid)) {
             flushPage(pageId);
+            txID2PageIdMap.get(tid).remove(pageId);
         }
     }
 
@@ -264,15 +267,9 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         // TODO: the eviction policy is really naive and ineffective, refine this when necessary!
-        Page chosenPage = pageList.get(0);
-        if (chosenPage.isDirty() != null) {
-            try {
-                flushPage(chosenPage.getId());
-            } catch (IOException e) {
-                // FIXME
-                throw new RuntimeException();
-            }
-        }
+        Page chosenPage = choosePageToEvict();
+        handleLocksOnPage(chosenPage);
+        assert chosenPage.isDirty() == null;
         discardPage(chosenPage.getId());
     }
 
@@ -281,5 +278,31 @@ public class BufferPool {
         // pageId2TxPermissionMap.get(pid).put(tid, perm);
         txID2PageIdMap.computeIfAbsent(tid, k -> new HashSet<>());
         txID2PageIdMap.get(tid).add(pid);
+        pageID2txIDMap.computeIfAbsent(pid, k -> new HashSet<>());
+        pageID2txIDMap.get(pid).add(tid);
+    }
+
+    private Page choosePageToEvict() throws DbException {
+        assert pageList.size() > 0;
+        Page ret = null;
+        for (Page page : pageList) {
+            if (page.isDirty() == null) {
+                ret = page;
+                break;
+            }
+        }
+        if (ret == null) {
+            throw new DbException("All pages are dirty.");
+        }
+        return ret;
+    }
+
+    private void handleLocksOnPage(Page thePage) {
+        // TODO: any locks transactions may already hold to the evicted page and handle them appropriately in your implementation.
+        PageId pageId = thePage.getId();
+        for (TransactionId txID : pageID2txIDMap.get(pageId)) {
+            transactionComplete(txID, false);
+            pageID2txIDMap.get(pageId).remove(txID);
+        }
     }
 }
