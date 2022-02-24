@@ -39,9 +39,8 @@ public class BufferPool {
     private final int maxPageNumber;
     private final List<Page> pageList;
     private final Map<PageId, Page> pageId2PageMap;
-    // private final Map<PageId, Map<TransactionId, Permissions>> pageId2TxPermissionMap;
-    private final Map<TransactionId, Set<PageId>> txID2PageIdMap;
-    private final Map<PageId, Set<TransactionId>> pageID2txIDMap;
+    private final Map<TransactionId, Set<PageId>> txId2PageIdMap;
+    private final Map<PageId, Set<TransactionId>> pageId2txIdMap;
     private final LockManager lockManager;
 
     /**
@@ -53,10 +52,9 @@ public class BufferPool {
         // some code goes here
         maxPageNumber = numPages;
         pageList = new LinkedList<>();
-        pageId2PageMap = new HashMap<>();
-        // pageId2TxPermissionMap = new HashMap<>();
-        txID2PageIdMap = new HashMap<>();
-        pageID2txIDMap = new HashMap<>();
+        pageId2PageMap = new ConcurrentHashMap<>();
+        txId2PageIdMap = new ConcurrentHashMap<>();
+        pageId2txIdMap = new ConcurrentHashMap<>();
         lockManager = new LockManager();
     }
     
@@ -124,6 +122,7 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         lockManager.releaseLock(tid, pid);
+        removeTransactionPageRelation(tid, pid);
     }
 
     /**
@@ -134,6 +133,13 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) {
         // some code goes here
         // not necessary for lab1|lab2
+        if (txId2PageIdMap.get(tid) == null) {
+            return;
+        }
+        PageId[] pageIdToRelease = txId2PageIdMap.get(tid).toArray(new PageId[0]);
+        for (PageId pid : pageIdToRelease) {
+            unsafeReleasePage(tid, pid);
+        }
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
@@ -153,6 +159,32 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+
+        if (commit) {
+            // Flush all pages to disk and reset dirty sign
+            for (PageId pid : txId2PageIdMap.get(tid)) {
+                Page page = pageId2PageMap.get(pid);
+                if (page.isDirty() == tid) {
+                    try {
+                        flushPage(pid);
+                        page.markDirty(false, tid);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        throw new RuntimeException();
+                    }
+                }
+            }
+        } else {
+            // discard all the pages that has been modified by this TX
+            for (PageId pid : txId2PageIdMap.get(tid)) {
+                Page page = pageId2PageMap.get(pid);
+                if (page.isDirty() == tid) {
+                    discardPage(pid);
+                }
+            }
+
+        }
+        transactionComplete(tid);
     }
 
     /**
@@ -178,6 +210,14 @@ public class BufferPool {
         HeapFile theFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
         List<Page> dirtyPages = theFile.insertTuple(tid, t);
         for (Page dirtyPage : dirtyPages) {
+            if (!pageId2PageMap.containsKey(dirtyPage.getId())) {
+                if (pageList.size() >= maxPageNumber) {
+                    evictPage();
+                }
+                lockManager.lock(tid, dirtyPage.getId(), Permissions.READ_WRITE);
+                pageList.add(dirtyPage);
+                pageId2PageMap.put(dirtyPage.getId(), dirtyPage);
+            }
             dirtyPage.markDirty(true, tid);
         }
     }
@@ -231,10 +271,6 @@ public class BufferPool {
         Page thePage = pageId2PageMap.get(pid);
         pageList.remove(thePage);
         pageId2PageMap.remove(pid);
-//        for (TransactionId txID : pageId2TxPermissionMap.get(pid).keySet()) {
-//            txID2PageIdMap.get(txID).remove(pid);
-//        }
-//        pageId2TxPermissionMap.remove(pid);
     }
 
     /**
@@ -253,9 +289,9 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
-        for (PageId pageId : txID2PageIdMap.get(tid)) {
+        for (PageId pageId : txId2PageIdMap.get(tid)) {
             flushPage(pageId);
-            txID2PageIdMap.get(tid).remove(pageId);
+            // removeTransactionPageRelation(tid, pageId);
         }
     }
 
@@ -268,18 +304,21 @@ public class BufferPool {
         // not necessary for lab1
         // TODO: the eviction policy is really naive and ineffective, refine this when necessary!
         Page chosenPage = choosePageToEvict();
-        handleLocksOnPage(chosenPage);
+        handleLocksOnCleanPage(chosenPage);
         assert chosenPage.isDirty() == null;
         discardPage(chosenPage.getId());
     }
 
     private void addTransactionPageRelation(TransactionId tid, PageId pid) {
-        // pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
-        // pageId2TxPermissionMap.get(pid).put(tid, perm);
-        txID2PageIdMap.computeIfAbsent(tid, k -> new HashSet<>());
-        txID2PageIdMap.get(tid).add(pid);
-        pageID2txIDMap.computeIfAbsent(pid, k -> new HashSet<>());
-        pageID2txIDMap.get(pid).add(tid);
+        txId2PageIdMap.computeIfAbsent(tid, k -> new HashSet<>());
+        txId2PageIdMap.get(tid).add(pid);
+        pageId2txIdMap.computeIfAbsent(pid, k -> new HashSet<>());
+        pageId2txIdMap.get(pid).add(tid);
+    }
+
+    private void removeTransactionPageRelation(TransactionId tid, PageId pid) {
+        txId2PageIdMap.get(tid).remove(pid);
+        pageId2txIdMap.get(pid).remove(tid);
     }
 
     private Page choosePageToEvict() throws DbException {
@@ -297,12 +336,11 @@ public class BufferPool {
         return ret;
     }
 
-    private void handleLocksOnPage(Page thePage) {
+    private void handleLocksOnCleanPage(Page thePage) {
         // TODO: any locks transactions may already hold to the evicted page and handle them appropriately in your implementation.
         PageId pageId = thePage.getId();
-        for (TransactionId txID : pageID2txIDMap.get(pageId)) {
+        for (TransactionId txID : pageId2txIdMap.get(pageId)) {
             transactionComplete(txID, false);
-            pageID2txIDMap.get(pageId).remove(txID);
         }
     }
 }

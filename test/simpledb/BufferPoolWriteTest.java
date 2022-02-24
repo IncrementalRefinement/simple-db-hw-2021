@@ -124,7 +124,6 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
         }
     }
 
-    // FIXME 这个测试用例就有问题，影响了我代码的整洁、和谐程度，甚至妨害了内存/硬盘之间的读写效率，暂时先掠过
     @Test public void handleManyDirtyPages() throws Exception {
     	HeapFileDuplicates hfd = new HeapFileDuplicates(empty.getFile(), empty.getTupleDesc(), 10);
     	Database.getCatalog().addTable(hfd, SystemTestUtil.getUUID());

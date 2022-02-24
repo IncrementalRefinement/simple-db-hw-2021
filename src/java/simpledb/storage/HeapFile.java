@@ -37,7 +37,6 @@ public class HeapFile implements DbFile {
     public HeapFile(File f, TupleDesc td) {
         file = f;
         tupleDesc = td;
-        // Should I do this?
     }
 
     /**
@@ -136,8 +135,9 @@ public class HeapFile implements DbFile {
             byte[] data = HeapPage.createEmptyPageData();
             HeapPageId newPageID = new HeapPageId(getId(), numPages());
             HeapPage newPage = new HeapPage(newPageID, data);
-            newPage.insertTuple(t);
             writePage(newPage);
+            newPage.insertTuple(t);
+            dirtyPages.add(newPage);
         }
 
         return dirtyPages;
