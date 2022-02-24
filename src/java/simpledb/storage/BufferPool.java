@@ -304,8 +304,13 @@ public class BufferPool {
         // not necessary for lab1
         // TODO: the eviction policy is really naive and ineffective, refine this when necessary!
         Page chosenPage = choosePageToEvict();
-        handleLocksOnCleanPage(chosenPage);
         assert chosenPage.isDirty() == null;
+        // 1. 释放锁，删除关系
+        TransactionId[] relatedTransactionID = pageId2txIdMap.get(chosenPage.getId()).toArray(new TransactionId[0]);
+        for (TransactionId tid : relatedTransactionID) {
+            unsafeReleasePage(tid, chosenPage.getId());
+        }
+        // 2. 从内存中删除页
         discardPage(chosenPage.getId());
     }
 
@@ -336,11 +341,11 @@ public class BufferPool {
         return ret;
     }
 
-    private void handleLocksOnCleanPage(Page thePage) {
-        // TODO: any locks transactions may already hold to the evicted page and handle them appropriately in your implementation.
-        PageId pageId = thePage.getId();
-        for (TransactionId txID : pageId2txIdMap.get(pageId)) {
-            transactionComplete(txID, false);
-        }
-    }
+//    private void handleLocksOnCleanPage(Page thePage) {
+//        // TODO: any locks transactions may already hold to the evicted page and handle them appropriately in your implementation.
+//        PageId pageId = thePage.getId();
+//        for (TransactionId txID : pageId2txIdMap.get(pageId)) {
+//            transactionComplete(txID, false);
+//        }
+//    }
 }
