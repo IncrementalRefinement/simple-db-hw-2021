@@ -6,6 +6,7 @@ import simpledb.common.DbException;
 import simpledb.common.DeadlockException;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
+import simpledb.util.LockManager;
 
 import java.io.*;
 
@@ -38,8 +39,9 @@ public class BufferPool {
     private final int maxPageNumber;
     private final List<Page> pageList;
     private final Map<PageId, Page> pageId2PageMap;
-    private final Map<PageId, Map<TransactionId, Permissions>> pageId2TxPermissionMap;
+    // private final Map<PageId, Map<TransactionId, Permissions>> pageId2TxPermissionMap;
     private final Map<TransactionId, Set<PageId>> txID2PageIdMap;
+    private final LockManager lockManager;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -51,8 +53,9 @@ public class BufferPool {
         maxPageNumber = numPages;
         pageList = new LinkedList<>();
         pageId2PageMap = new HashMap<>();
-        pageId2TxPermissionMap = new HashMap<>();
+        // pageId2TxPermissionMap = new HashMap<>();
         txID2PageIdMap = new HashMap<>();
+        lockManager = new LockManager();
     }
     
     public static int getPageSize() {
@@ -89,8 +92,9 @@ public class BufferPool {
         // some code goes here
         // FIXME: the same tid request with different permission level
         //    Also, the same page might be requested by multiple transaction
+        lockManager.lock(tid, pid, perm);
         if (pageId2PageMap.containsKey(pid)) {
-            addTransactionPageRelation(tid, pid, perm);
+            addTransactionPageRelation(tid, pid);
             return pageId2PageMap.get(pid);
         } else {
             while (pageList.size() >= maxPageNumber) {
@@ -100,7 +104,7 @@ public class BufferPool {
             Page newPage = dbfile.readPage(pid);
             pageList.add(newPage);
             pageId2PageMap.put(pid, newPage);
-            addTransactionPageRelation(tid, pid, perm);
+            addTransactionPageRelation(tid, pid);
             return newPage;
         }
     }
@@ -117,6 +121,7 @@ public class BufferPool {
     public  void unsafeReleasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+        lockManager.releaseLock(tid, pid);
     }
 
     /**
@@ -133,7 +138,7 @@ public class BufferPool {
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return lockManager.holdsLock(tid, p);
     }
 
     /**
@@ -224,10 +229,10 @@ public class BufferPool {
         Page thePage = pageId2PageMap.get(pid);
         pageList.remove(thePage);
         pageId2PageMap.remove(pid);
-        for (TransactionId txID : pageId2TxPermissionMap.get(pid).keySet()) {
-            txID2PageIdMap.get(txID).remove(pid);
-        }
-        pageId2TxPermissionMap.remove(pid);
+//        for (TransactionId txID : pageId2TxPermissionMap.get(pid).keySet()) {
+//            txID2PageIdMap.get(txID).remove(pid);
+//        }
+//        pageId2TxPermissionMap.remove(pid);
     }
 
     /**
@@ -271,9 +276,9 @@ public class BufferPool {
         discardPage(chosenPage.getId());
     }
 
-    private void addTransactionPageRelation(TransactionId tid, PageId pid, Permissions perm) {
-        pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
-        pageId2TxPermissionMap.get(pid).put(tid, perm);
+    private void addTransactionPageRelation(TransactionId tid, PageId pid) {
+        // pageId2TxPermissionMap.computeIfAbsent(pid, k -> new HashMap<>());
+        // pageId2TxPermissionMap.get(pid).put(tid, perm);
         txID2PageIdMap.computeIfAbsent(tid, k -> new HashSet<>());
         txID2PageIdMap.get(tid).add(pid);
     }
