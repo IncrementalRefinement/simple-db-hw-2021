@@ -1,95 +1,138 @@
 package simpledb.util;
 
 import simpledb.common.Permissions;
+import simpledb.storage.Page;
 import simpledb.storage.PageId;
+import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.StampedLock;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 public class LockManager {
 
-    // TODO: The lock number might be expended too much in memory
-    private Map<PageId, ReadWriteLock> pageId2LockMap;
-    private Map<TransactionId, Map<PageId, Permissions>> tid2LockedPage2PermissionMap;
+    // TODO: Refactor this shit
+    private Map<PageId, Set<Lock>> pageId2LocksMap;
 
-    public LockManager() {
-        pageId2LockMap = new ConcurrentHashMap<>();
-        tid2LockedPage2PermissionMap = new ConcurrentHashMap<>();
-    }
+    private class Lock {
+        private TransactionId tid;
+        private Permissions permission;
 
-    // 一个事务对于一个页只能持有一把锁，这里支持锁的 upgrade，但不支持 downgrade
-    public void lock(TransactionId tid, PageId pageId, Permissions perm) {
-        pageId2LockMap.putIfAbsent(pageId, new StampedLock().asReadWriteLock());
-        ReadWriteLock pageLock = pageId2LockMap.get(pageId);
-
-        switch (perm) {
-            case READ_ONLY: {
-                if (holdsLock(tid, pageId)) {
-                    // 已经持有锁，既不重入，也不降级，也不需要更新 Map 中锁的等级
-                    return;
-                }
-                pageLock.readLock().lock();
-                break;
-            }
-            case READ_WRITE: {
-                if (holdsLock(tid, pageId)) {
-                    if (Permissions.READ_ONLY == tid2LockedPage2PermissionMap.get(tid).get(pageId)) {
-                        // 如果需要进行 upgrade，先释放，再尝试获取
-                        pageLock.readLock().unlock();
-                        pageLock.writeLock().lock();
-                    }
-                    break;
-                }
-                pageLock.writeLock().lock();
-                break;
-            }
-            default:
-                throw new RuntimeException();
+        public Lock(TransactionId tid, Permissions permission) {
+            this.tid = tid;
+            this.permission = permission;
         }
 
-        tid2LockedPage2PermissionMap.putIfAbsent(tid, new HashMap<>());
-        tid2LockedPage2PermissionMap.get(tid).put(pageId, perm);
+        public TransactionId getTid() {
+            return  tid;
+        }
+
+        public Permissions getPermission() {
+            return this.permission;
+        }
+
+        public void setPermission(Permissions permission) {
+            this.permission = permission;
+        }
+    }
+
+    public LockManager() {
+        pageId2LocksMap = new ConcurrentHashMap<>();
+    }
+
+    public void lock(TransactionId tid, PageId pageId, Permissions perm) throws TransactionAbortedException {
+        long beginTime = System.currentTimeMillis();
+        long timeOut = beginTime + getRandomTimeOut();
+        boolean lockAcquired = false;
+        while (!lockAcquired) {
+            long now = System.currentTimeMillis();
+            if (now > timeOut) {
+                break;
+            }
+            lockAcquired = acquireLock(tid, pageId, perm);
+        }
+        if (!lockAcquired) {
+            throw new TransactionAbortedException();
+        }
+    }
+
+    private synchronized boolean acquireLock(TransactionId tid, PageId pageId, Permissions perm) {
+        // FIXME: the if-else clause is too tedious here
+        if (pageId2LocksMap.get(pageId) == null) {
+            pageId2LocksMap.put(pageId, new HashSet<>());
+            pageId2LocksMap.get(pageId).add(new Lock(tid, perm));
+            return true;
+        } else {
+            Set<Lock> locks = pageId2LocksMap.get(pageId);
+            if (locks.size() == 0) {
+                locks.add(new Lock(tid, perm));
+                return true;
+            }
+            if (perm == Permissions.READ_WRITE) {
+                if (locks.size() != 1) {
+                    return false;
+                } else {
+                    Lock theLock = pageId2LocksMap.get(pageId).toArray(new Lock[0])[0];
+                    if (!theLock.getTid().equals(tid)) {
+                        return false;
+                    }
+                    if (theLock.getPermission() == Permissions.READ_ONLY) {
+                        theLock.setPermission(Permissions.READ_WRITE);
+                    }
+                    return true;
+                }
+            } else if (perm == Permissions.READ_ONLY) {
+                for (Lock lock : locks) {
+                    if (lock.getTid().equals(tid)) {
+                        return true;
+                    }
+                }
+                if (locks.size() > 1) {
+                    locks.add(new Lock(tid, perm));
+                    return true;
+                } else {
+                    Lock theLock = pageId2LocksMap.get(pageId).toArray(new Lock[0])[0];
+                    if (theLock.getPermission() == Permissions.READ_WRITE) {
+                        return false;
+                    } else {
+                        locks.add(new Lock(tid, perm));
+                        return true;
+                    }
+                }
+            } else {
+                throw new RuntimeException();
+            }
+        }
     }
 
 
-    public void releaseLock(TransactionId tid, PageId pageId) {
+    public synchronized void releaseLock(TransactionId tid, PageId pageId) {
         if (!holdsLock(tid, pageId)) {
             return;
         }
-        ReadWriteLock pageLock = pageId2LockMap.get(pageId);
-        Permissions perm = tid2LockedPage2PermissionMap.get(tid).remove(pageId);
-
-        switch (perm) {
-            case READ_ONLY: {
-                pageLock.readLock().unlock();
-                break;
-            }
-            case READ_WRITE: {
-                pageLock.writeLock().unlock();
-                break;
-            }
-            default:
-                throw new RuntimeException();
-        }
-
+        pageId2LocksMap.get(pageId).removeIf(lock -> lock.getTid().equals(tid));
     }
 
-    public boolean holdsLock(TransactionId tid, PageId pageId) {
-        if (!tid2LockedPage2PermissionMap.containsKey(tid)) {
+    public synchronized boolean holdsLock(TransactionId tid, PageId pageId) {
+        if (!pageId2LocksMap.containsKey(pageId)) {
             return false;
         }
 
-        if (tid2LockedPage2PermissionMap.get(tid) == null) {
-            return false;
+        for (Lock lock : pageId2LocksMap.get(pageId)) {
+            if (lock.getTid().equals(tid)) {
+                return true;
+            }
         }
 
-        return tid2LockedPage2PermissionMap.get(tid).containsKey(pageId);
+        return false;
+    }
+
+    private long getRandomTimeOut() {
+        return 1000 + new Random().nextInt(2000);
     }
 }
