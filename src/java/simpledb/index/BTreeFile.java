@@ -193,6 +193,18 @@ public class BTreeFile implements DbFile {
 
 		pagePtr = (BTreePage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
 
+		if (pid.pgcateg() == BTreePageId.LEAF) {
+			return (BTreeLeafPage) pagePtr;
+		}
+
+		if (f == null) {
+			while (pagePtr.getId().pgcateg() != BTreePageId.LEAF) {
+				BTreeEntry entry = ((BTreeInternalPage) pagePtr).iterator().next();
+				pagePtr = (BTreePage) getPage(tid, dirtypages, entry.getLeftChild(), Permissions.READ_ONLY);
+			}
+			pagePtr = (BTreePage) getPage(tid, dirtypages, pagePtr.getId(), perm);
+			return (BTreeLeafPage) pagePtr;
+		}
 
 		while (pagePtr.getId().pgcateg() != BTreePageId.LEAF && pagePtr.getId().pgcateg() == BTreePageId.INTERNAL) {
 			BTreeInternalPage internalPage = (BTreeInternalPage) pagePtr;
@@ -221,6 +233,7 @@ public class BTreeFile implements DbFile {
 		}
 
 		// the code shouldn't go here
+		// 由于不是从根节点开始搜索，所以完全存在走到这里的情况
 		throw new RuntimeException();
 	}
 	
