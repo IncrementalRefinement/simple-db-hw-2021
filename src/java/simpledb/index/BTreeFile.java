@@ -1,6 +1,7 @@
 package simpledb.index;
 
 import java.io.*;
+import java.security.Permission;
 import java.util.*;
 
 import simpledb.common.Database;
@@ -188,7 +189,39 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+		BTreePage pagePtr;
+
+		pagePtr = (BTreePage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+
+
+		while (pagePtr.getId().pgcateg() != BTreePageId.LEAF && pagePtr.getId().pgcateg() == BTreePageId.INTERNAL) {
+			BTreeInternalPage internalPage = (BTreeInternalPage) pagePtr;
+			Iterator<BTreeEntry> entries = internalPage.iterator();
+			while (entries.hasNext()) {
+				BTreeEntry entry = entries.next();
+				if (f.compare(Op.LESS_THAN_OR_EQ, entry.getKey())) {
+					// find the next internal page or the leafPage
+					pagePtr = (BTreePage) getPage(tid, dirtypages, entry.getLeftChild(), Permissions.READ_ONLY);
+					break;
+				} else {
+					if (!entries.hasNext()) {
+						// reach the last entry
+						pagePtr = (BTreePage) getPage(tid, dirtypages, entry.getRightChild(), Permissions.READ_ONLY);
+						break;
+					}
+				}
+			}
+			if (pagePtr.getId().pgcateg() == BTreePageId.LEAF) {
+				// find the leafPage
+				// 1. update the permission
+				pagePtr = (BTreePage) getPage(tid, dirtypages, pagePtr.getId(), perm);
+				// TODO: should I release the lock?
+				return (BTreeLeafPage) pagePtr;
+			}
+		}
+
+		// the code shouldn't go here
+		throw new RuntimeException();
 	}
 	
 	/**
