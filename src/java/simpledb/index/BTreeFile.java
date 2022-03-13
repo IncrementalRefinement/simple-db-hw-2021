@@ -227,7 +227,7 @@ public class BTreeFile implements DbFile {
 				// find the leafPage
 				// 1. update the permission
 				pagePtr = (BTreePage) getPage(tid, dirtypages, pagePtr.getId(), perm);
-				// TODO: should I release the lock?
+				// should I release the lock? No worry, the bufferpool will handle this
 				return (BTreeLeafPage) pagePtr;
 			}
 		}
@@ -285,8 +285,41 @@ public class BTreeFile implements DbFile {
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
-		
+
+		// 1. create the new page
+		BTreeLeafPage newPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+		// 2. update the pointers of siblings
+		// dirtypages.put(newPage.getId(), newPage);
+		if (page.getRightSiblingId() != null) {
+			BTreeLeafPage rightSiblingPage = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(), Permissions.READ_WRITE);
+			rightSiblingPage.setLeftSiblingId(newPage.getId());
+		}
+		page.setRightSiblingId(newPage.getId());
+		newPage.setRightSiblingId(page.getRightSiblingId());
+		newPage.setLeftSiblingId(page.getId());
+		// 3. move entries to new page
+		int numToMove = page.getNumTuples() / 2; // TODO: At this time, numToMove == page.numSlots. So no need to go through the page header again
+		Iterator<Tuple> entries = page.reverseIterator();
+		Field fieldToCopy = null;
+		for (int i = 0; i < numToMove; i++) {
+			Tuple tuple = entries.next();
+			page.deleteTuple(tuple);
+			newPage.insertTuple(tuple);
+			if (i == numToMove - 1) {
+				fieldToCopy = tuple.getField(keyField);
+			}
+		}
+		// 4. getParentWithEmtpySlots and insert new entry
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), fieldToCopy);
+		newPage.setParentId(page.getId());
+		BTreeEntry newEntry = new BTreeEntry(fieldToCopy, page.getId(), newPage.getId());
+		parent.insertEntry(newEntry);
+		// 5. return the desired page
+		if (field.compare(Op.LESS_THAN, fieldToCopy)) {
+			return page;
+		} else {
+			return newPage;
+		}
 	}
 	
 	/**
@@ -312,7 +345,7 @@ public class BTreeFile implements DbFile {
 	 * @throws TransactionAbortedException
 	 */
 	public BTreeInternalPage splitInternalPage(TransactionId tid, Map<PageId, Page> dirtypages,
-			BTreeInternalPage page, Field field) 
+			BTreeInternalPage page, Field field)
 					throws DbException, IOException, TransactionAbortedException {
 		// some code goes here
         //
@@ -323,7 +356,37 @@ public class BTreeFile implements DbFile {
 		// the parent pointers of all the children moving to the new page.  updateParentPointers()
 		// will be useful here.  Return the page into which an entry with the given key field
 		// should be inserted.
-		return null;
+
+		// 1. split the node, find the middleKey to push
+		BTreeInternalPage newPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		Field keyToPush = null;
+		int numToMove = page.getNumEntries() / 2;
+		BTreeEntry entryToPush = null;
+		Iterator<BTreeEntry> reversedEntries = page.reverseIterator();
+		for (int i = 0; i <= numToMove; i++) {
+			BTreeEntry theEntry = reversedEntries.next();
+			page.deleteKeyAndRightChild(theEntry);
+			if (i == numToMove) {
+				entryToPush = theEntry;
+				keyToPush = theEntry.getKey();
+			} else {
+				newPage.insertEntry(theEntry);
+			}
+		}
+		// 2. find the parent the Internal Node to insert the new Entry
+		// also, do remember to set the parent node of the newly created node
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), keyToPush);
+		newPage.setParentId(parent.getId());
+		// 3.update e the left pointer of the node after the push up node should be modified(how to find that?)
+		parent.insertEntry(entryToPush);
+		updateParentPointers(tid, dirtypages, parent);
+		// TODO: should i also update the pointers of the parent of the old?
+		// 4. return the desired page
+		if (field.compare(Op.LESS_THAN, keyToPush)) {
+			return page;
+		} else {
+			return newPage;
+		}
 	}
 	
 	/**
