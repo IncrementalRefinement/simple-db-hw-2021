@@ -69,6 +69,16 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		empty.insertTuple(tid, tup);
 		assertEquals(4, empty.numPages());
 
+		DbFileIterator it0 = empty.iterator(tid);
+		it0.open();
+		int total = 0;
+		// TODO: 502-->753, 753-->502 infinite loop
+		while (it0.hasNext()) {
+			Tuple t = it0.next();
+			total++;
+		}
+		assertEquals(total, 754);
+
 		// now make sure the records are sorted on the key field
 		DbFileIterator it = empty.iterator(tid);
 		it.open();
@@ -76,6 +86,9 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		while(it.hasNext()) {
 			Tuple t = it.next();
 			int value = ((IntField) t.getField(0)).getValue();
+			if (value < prev) {
+				System.out.println(value);
+			}
 			assertTrue(value >= prev);
 			prev = value;
 		} 

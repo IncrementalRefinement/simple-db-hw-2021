@@ -294,8 +294,8 @@ public class BTreeFile implements DbFile {
 			BTreeLeafPage rightSiblingPage = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(), Permissions.READ_WRITE);
 			rightSiblingPage.setLeftSiblingId(newPage.getId());
 		}
-		page.setRightSiblingId(newPage.getId());
 		newPage.setRightSiblingId(page.getRightSiblingId());
+		page.setRightSiblingId(newPage.getId());
 		newPage.setLeftSiblingId(page.getId());
 		// 3. move entries to new page
 		int numToMove = page.getNumTuples() / 2; // TODO: At this time, numToMove == page.numSlots. So no need to go through the page header again
