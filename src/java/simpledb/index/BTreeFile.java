@@ -311,7 +311,7 @@ public class BTreeFile implements DbFile {
 		}
 		// 4. getParentWithEmtpySlots and insert new entry
 		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), fieldToCopy);
-		newPage.setParentId(page.getId());
+		newPage.setParentId(parent.getId());
 		BTreeEntry newEntry = new BTreeEntry(fieldToCopy, page.getId(), newPage.getId());
 		parent.insertEntry(newEntry);
 		// 5. return the desired page
@@ -359,6 +359,7 @@ public class BTreeFile implements DbFile {
 
 		// 1. split the node, find the middleKey to push
 		BTreeInternalPage newPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		// dirtypages.put(newPage.getId(), newPage);
 		Field keyToPush = null;
 		int numToMove = page.getNumEntries() / 2;
 		BTreeEntry entryToPush = null;
@@ -367,19 +368,22 @@ public class BTreeFile implements DbFile {
 			BTreeEntry theEntry = reversedEntries.next();
 			page.deleteKeyAndRightChild(theEntry);
 			if (i == numToMove) {
+				// TODO: 这里推上去的entry的左右指针应该是分裂之后的节点，这里还存在一个隐患，就是新的节点推上去之后，位于腿上去节点右侧的那个节点的左指针要变，不知道insert有没有做到这一点
 				entryToPush = theEntry;
 				keyToPush = theEntry.getKey();
 			} else {
 				newPage.insertEntry(theEntry);
 			}
 		}
+		entryToPush.setLeftChild(page.getId());
+		entryToPush.setRightChild(newPage.getId());
 		// 2. find the parent the Internal Node to insert the new Entry
 		// also, do remember to set the parent node of the newly created node
 		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), keyToPush);
 		newPage.setParentId(parent.getId());
 		// 3.update e the left pointer of the node after the push up node should be modified(how to find that?)
 		parent.insertEntry(entryToPush);
-		updateParentPointers(tid, dirtypages, parent);
+		updateParentPointers(tid, dirtypages, newPage);
 		// TODO: should i also update the pointers of the parent of the old?
 		// 4. return the desired page
 		if (field.compare(Op.LESS_THAN, keyToPush)) {
