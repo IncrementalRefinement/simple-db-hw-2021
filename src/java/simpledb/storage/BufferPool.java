@@ -207,7 +207,7 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         // TODO: what if page size of one insertion exceeds the max capacity of bufferpool?
-        HeapFile theFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        DbFile theFile = Database.getCatalog().getDatabaseFile(tableId);
         List<Page> dirtyPages = theFile.insertTuple(tid, t);
         for (Page dirtyPage : dirtyPages) {
             if (!pageId2PageMap.containsKey(dirtyPage.getId())) {
@@ -219,8 +219,8 @@ public class BufferPool {
                 pageId2PageMap.put(dirtyPage.getId(), dirtyPage);
             }
             dirtyPage.markDirty(true, tid);
-        }
     }
+}
 
     /**
      * Remove the specified tuple from the buffer pool.
@@ -239,9 +239,12 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
-        HeapPage thePage = (HeapPage) getPage(tid, t.getRecordId().getPageId(), Permissions.READ_WRITE);
-        thePage.deleteTuple(t);
-        thePage.markDirty(true, tid);
+        // TODO: delete the tuple in file, and mark the resut as dirty, not right here
+        DbFile theFile = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        List<Page> dirtyPages = theFile.deleteTuple(tid, t);
+        for (Page dirtyPage : dirtyPages) {
+            dirtyPage.markDirty(true, tid);
+        }
     }
 
     /**
