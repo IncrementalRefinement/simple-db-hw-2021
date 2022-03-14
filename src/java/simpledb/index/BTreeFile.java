@@ -887,6 +887,30 @@ public class BTreeFile implements DbFile {
 		// the sibling pointers, and make the right page available for reuse.
 		// Delete the entry in the parent corresponding to the two pages that are merging -
 		// deleteParentEntry() will be useful here
+
+		dirtypages.put(leftPage.getId(), leftPage);
+		dirtypages.put(parent.getId(), parent);
+		// should I add the right page to dirty pages?
+
+		// 1. modify the sibling pointers,(no need for internal page)
+		// 2. move the entries
+		leftPage.setRightSiblingId(rightPage.getRightSiblingId());
+		if (rightPage.getRightSiblingId() != null) {
+			((BTreeLeafPage) getPage(tid, dirtypages, rightPage.getRightSiblingId(), Permissions.READ_WRITE)).setLeftSiblingId(leftPage.getId());
+		}
+		rightPage.setLeftSiblingId(null);
+		rightPage.setRightSiblingId(null);
+
+		Iterator<Tuple> tupleIterator = rightPage.iterator();
+		while (tupleIterator.hasNext()) {
+			Tuple theTuple = tupleIterator.next();
+			rightPage.deleteTuple(theTuple);
+			leftPage.insertTuple(theTuple);
+		}
+		// 3. how to make page reusable? #setEmptyPage
+		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+		// 4. delete the entry from parent node
+		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 	}
 
 	/**
@@ -920,6 +944,28 @@ public class BTreeFile implements DbFile {
 		// and make the right page available for reuse
 		// Delete the entry in the parent corresponding to the two pages that are merging -
 		// deleteParentEntry() will be useful here
+
+		dirtypages.put(leftPage.getId(), leftPage);
+		dirtypages.put(parent.getId(), parent);
+		// should I add the right page to dirty pages?
+
+		// 1. modify the sibling pointers,(no need for internal page)
+		// 2. move the entries
+		BTreeEntry entryToPullDown = new BTreeEntry(parentEntry.getKey(), leftPage.reverseIterator().next().getRightChild(), rightPage.iterator().next().getLeftChild());
+		leftPage.insertEntry(entryToPullDown);
+
+		Iterator<BTreeEntry> entryIterator = rightPage.iterator();
+		while (entryIterator.hasNext()) {
+			BTreeEntry theEntry = entryIterator.next();
+			rightPage.deleteKeyAndLeftChild(theEntry);
+			leftPage.insertEntry(theEntry);
+		}
+		// 3. how to make page reusable? #setEmptyPage
+		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+		// 4. delete the entry from parent node
+		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
+		// 5. update the pointers of the children nodes
+		updateParentPointers(tid, dirtypages, leftPage);
 	}
 	
 	/**
