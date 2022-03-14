@@ -686,12 +686,15 @@ public class BTreeFile implements DbFile {
 		// 1. steal from the sibling
 		Tuple tupleToSteal = null;
 		// FIXME: too much overhead in this loop
-		while (Math.abs(sibling.getNumTuples()) - page.getNumTuples() > 1) {
-			if (isRightSibling) {
-				tupleToSteal = sibling.iterator().next();
-			} else {
-				tupleToSteal = sibling.reverseIterator().next();
-			}
+		int numToSteal = (sibling.getNumTuples() + page.getNumTuples()) / 2 - page.getNumTuples();
+		Iterator<Tuple> tupleIterator;
+		if (isRightSibling) {
+			tupleIterator = sibling.iterator();
+		} else {
+			tupleIterator = sibling.reverseIterator();
+		}
+		for (int i = 0; i < numToSteal; i++) {
+			tupleToSteal = tupleIterator.next();
 			sibling.deleteTuple(tupleToSteal);
 			page.insertTuple(tupleToSteal);
 		}
@@ -705,6 +708,8 @@ public class BTreeFile implements DbFile {
 		BTreeEntry newEntry = new BTreeEntry(newKey, entry.getLeftChild(), entry.getRightChild());
 		newEntry.setRecordId(entry.getRecordId());
 		parent.updateEntry(newEntry);
+
+		// check(new TransactionId());
 	}
 
 	/**
@@ -792,13 +797,16 @@ public class BTreeFile implements DbFile {
 
 		// 1. rotate the entry
 		// FIXME: too much overhead in this loop
-		while (Math.abs(leftSibling.getNumEntries() - page.getNumEntries()) > 1) {
-			BTreeEntry entryUpdateToParent = new BTreeEntry(leftSibling.reverseIterator().next().getKey(), parentEntry.getLeftChild(), parentEntry.getRightChild());
+		int numToSteal = (leftSibling.getNumEntries() + page.getNumEntries()) / 2 - page.getNumEntries();
+		Iterator<BTreeEntry> bTreeEntryIterator = leftSibling.reverseIterator();
+		for (int i = 0; i < numToSteal; i++) {
+			BTreeEntry entryToSteal = bTreeEntryIterator.next();
+			leftSibling.deleteKeyAndRightChild(entryToSteal);
+			BTreeEntry entryUpdateToParent = new BTreeEntry(entryToSteal.getKey(), parentEntry.getLeftChild(), parentEntry.getRightChild());
 			entryUpdateToParent.setRecordId(parentEntry.getRecordId());
 			parent.updateEntry(entryUpdateToParent);
 
-			BTreeEntry entryToSteal = leftSibling.reverseIterator().next();
-			leftSibling.deleteKeyAndRightChild(entryToSteal);
+
 			entryToSteal.setKey(parentEntry.getKey());
 			entryToSteal.setLeftChild(entryToSteal.getRightChild());
 			entryToSteal.setRightChild(page.iterator().next().getLeftChild());
@@ -807,6 +815,8 @@ public class BTreeFile implements DbFile {
 
 		// 2. update the parent pointers of the right page's children
 		updateParentPointers(tid, dirtypages, page);
+
+		// check(new TransactionId());
 	}
 	
 	/**
@@ -842,12 +852,14 @@ public class BTreeFile implements DbFile {
 
 		// 1. rotate the entry
 		// FIXME: too much overhead in this loop
-		while (Math.abs(rightSibling.getNumEntries() - page.getNumEntries()) > 1) {
-			BTreeEntry entryUpdateToParent = new BTreeEntry(rightSibling.iterator().next().getKey(), parentEntry.getLeftChild(), parentEntry.getRightChild());
+		int numToSteal = (rightSibling.getNumEntries() + page.getNumEntries()) / 2 - page.getNumEntries();
+		Iterator<BTreeEntry> bTreeEntryIterator = rightSibling.iterator();
+		for (int i = 0; i < numToSteal; i++) {
+			BTreeEntry entryToSteal = bTreeEntryIterator.next();
+			BTreeEntry entryUpdateToParent = new BTreeEntry(entryToSteal.getKey(), parentEntry.getLeftChild(), parentEntry.getRightChild());
 			entryUpdateToParent.setRecordId(parentEntry.getRecordId());
 			parent.updateEntry(entryUpdateToParent);
 
-			BTreeEntry entryToSteal = rightSibling.iterator().next();
 			rightSibling.deleteKeyAndLeftChild(entryToSteal);
 			entryToSteal.setKey(parentEntry.getKey());
 			entryToSteal.setRightChild(entryToSteal.getLeftChild());
@@ -857,6 +869,8 @@ public class BTreeFile implements DbFile {
 
 		// 2. update the parent pointers of the right page's children
 		updateParentPointers(tid, dirtypages, page);
+
+		// check(new TransactionId());
 	}
 	
 	/**
@@ -911,6 +925,8 @@ public class BTreeFile implements DbFile {
 		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
 		// 4. delete the entry from parent node
 		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
+
+		// check(new TransactionId());
 	}
 
 	/**
@@ -966,6 +982,8 @@ public class BTreeFile implements DbFile {
 		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 		// 5. update the pointers of the children nodes
 		updateParentPointers(tid, dirtypages, leftPage);
+
+		// check(new TransactionId());
 	}
 	
 	/**
@@ -1281,6 +1299,14 @@ public class BTreeFile implements DbFile {
 		return new BTreeFileIterator(this, tid);
 	}
 
+	private void check(TransactionId tid) {
+		try {
+			BTreeChecker.checkRep(this, tid, new HashMap<>(), true);
+		} catch (IOException | TransactionAbortedException | DbException e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		}
+	}
 }
 
 /**

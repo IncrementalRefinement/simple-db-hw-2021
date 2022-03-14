@@ -243,6 +243,14 @@ public class BufferPool {
         DbFile theFile = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
         List<Page> dirtyPages = theFile.deleteTuple(tid, t);
         for (Page dirtyPage : dirtyPages) {
+            if (!pageId2PageMap.containsKey(dirtyPage.getId())) {
+                if (pageList.size() >= maxPageNumber) {
+                    evictPage();
+                }
+                lockManager.lock(tid, dirtyPage.getId(), Permissions.READ_WRITE);
+                pageList.add(dirtyPage);
+                pageId2PageMap.put(dirtyPage.getId(), dirtyPage);
+            }
             dirtyPage.markDirty(true, tid);
         }
     }

@@ -220,6 +220,7 @@ public class BTreeFileDeleteTest extends SimpleDbTestBase {
 			it = rightChild.iterator();
 			count++;
 		}
+		// BTreeChecker.checkRep(bf, tid, new HashMap<>(), true);
 
 		// deleting a page of tuples should bring the internal page below minimum 
 		// occupancy and cause the entries to be redistributed
