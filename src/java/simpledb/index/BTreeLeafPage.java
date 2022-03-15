@@ -34,10 +34,10 @@ public class BTreeLeafPage extends BTreePage {
 		Iterator<Tuple> it = this.iterator();
 		while (it.hasNext()) {
 			Tuple t = it.next();
-			if (!(null == prev || prev.compare(Predicate.Op.LESS_THAN_OR_EQ, t.getField(fieldid)))) {
-				System.out.println("Here");
-			}
-			// assert(null == prev || prev.compare(Predicate.Op.LESS_THAN_OR_EQ, t.getField(fieldid)));
+//			if (!(null == prev || prev.compare(Predicate.Op.LESS_THAN_OR_EQ, t.getField(fieldid)))) {
+//				System.out.println("Here");
+//			}
+			assert(null == prev || prev.compare(Predicate.Op.LESS_THAN_OR_EQ, t.getField(fieldid)));
 			prev = t.getField(fieldid);
 			assert(t.getRecordId().getPageId().equals(this.getId()));
 		}

@@ -811,6 +811,7 @@ public class BTreeFile implements DbFile {
 			entryToSteal.setLeftChild(entryToSteal.getRightChild());
 			entryToSteal.setRightChild(page.iterator().next().getLeftChild());
 			page.insertEntry(entryToSteal);
+			parentEntry = entryUpdateToParent;
 		}
 
 		// 2. update the parent pointers of the right page's children
@@ -865,6 +866,7 @@ public class BTreeFile implements DbFile {
 			entryToSteal.setRightChild(entryToSteal.getLeftChild());
 			entryToSteal.setLeftChild(page.reverseIterator().next().getRightChild());
 			page.insertEntry(entryToSteal);
+			parentEntry = entryUpdateToParent;
 		}
 
 		// 2. update the parent pointers of the right page's children
