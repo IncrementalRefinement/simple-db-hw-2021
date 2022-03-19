@@ -461,7 +461,7 @@ public class LogFile {
             synchronized(this) {
                 preAppend();
                 // some code goes here
-                print();
+                // print();
                 long currentRecordOffset = tidToFirstLogRecord.get(tid.getId());
                 raf.seek(currentRecordOffset);
                 while (true) {
@@ -482,6 +482,8 @@ public class LogFile {
                         currentRecordOffset = getNextRecordBeginOffset(currentRecordOffset);
                         raf.seek(currentRecordOffset);
                     } catch (EOFException e) {
+                        // release the locks associated with the transaction
+                        Database.getBufferPool().transactionComplete(tid);
                         break;
                     }
                 }
