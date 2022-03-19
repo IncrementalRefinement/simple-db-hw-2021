@@ -457,9 +457,34 @@ public class LogFile {
     public void rollback(TransactionId tid)
         throws NoSuchElementException, IOException {
         synchronized (Database.getBufferPool()) {
+            // TODO: didn't reset the file pointer of raf, might have some issue?
             synchronized(this) {
                 preAppend();
                 // some code goes here
+                print();
+                long currentRecordOffset = tidToFirstLogRecord.get(tid.getId());
+                raf.seek(currentRecordOffset);
+                while (true) {
+                    try {
+                        int logType = raf.readInt();
+                        if (logType > CHECKPOINT_RECORD || logType < ABORT_RECORD) {
+                            throw new RuntimeException("Not supported log record type: " + logType);
+                        }
+
+                        if (logType == UPDATE_RECORD) {
+                            long logTxID = raf.readLong();
+                            if (logTxID == tid.getId()) {
+                                Page pageBefore = readPageData(raf);
+                                Database.getCatalog().getDatabaseFile(pageBefore.getId().getTableId()).writePage(pageBefore);
+                                Database.getBufferPool().discardPage(pageBefore.getId());
+                            }
+                        }
+                        currentRecordOffset = getNextRecordBeginOffset(currentRecordOffset);
+                        raf.seek(currentRecordOffset);
+                    } catch (EOFException e) {
+                        break;
+                    }
+                }
             }
         }
     }
@@ -571,4 +596,38 @@ public class LogFile {
         raf.getChannel().force(true);
     }
 
+    // return the offset of the next tuple
+    private long getNextRecordBeginOffset(long currentRecordOffset) throws IOException {
+        long ret;
+        try {
+            raf.seek(currentRecordOffset);
+            int recordType = raf.readInt();
+            switch (recordType) {
+                case ABORT_RECORD:
+                case COMMIT_RECORD:
+                case BEGIN_RECORD:
+                    ret = currentRecordOffset + INT_SIZE + 2 * LONG_SIZE;
+                    break;
+                case CHECKPOINT_RECORD: {
+                    raf.seek(currentRecordOffset + INT_SIZE + LONG_SIZE);
+                    int txNumber = raf.readInt();
+                    ret = currentRecordOffset + 2 * INT_SIZE + (2 + txNumber * 2L) * LONG_SIZE;
+                    break;
+                }
+                case UPDATE_RECORD: {
+                    raf.readLong();
+                    readPageData(raf);
+                    readPageData(raf);
+                    ret = raf.getFilePointer() + LONG_SIZE;
+                    break;
+                }
+                default:
+                    throw new RuntimeException("Noe recognizable record type: " + recordType);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException();
+        }
+
+        return ret;
+    }
 }
