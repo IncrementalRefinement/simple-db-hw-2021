@@ -167,6 +167,7 @@ public class BufferPool {
                 if (page.isDirty() == tid) {
                     try {
                         flushPage(pid);
+                        page.setBeforeImage();
                         page.markDirty(false, tid);
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -264,7 +265,9 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         for (Page page : pageList) {
-            flushPage(page.getId());
+            if (page.isDirty() != null) {
+                flushPage(page.getId());
+            }
         }
     }
 
@@ -291,8 +294,18 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+
+        // append an update record to the log, with
+        // a before-image and after-image.
+        Page p = pageId2PageMap.get(pid);
+        TransactionId dirtier = p.isDirty();
+        if (dirtier != null) {
+            Database.getLogFile().logWrite(dirtier, p.getBeforeImage(), p);
+            Database.getLogFile().force();
+        }
+
         DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        file.writePage(pageId2PageMap.get(pid));
+        file.writePage(p);
     }
 
     /** Write all pages of the specified transaction to disk.
