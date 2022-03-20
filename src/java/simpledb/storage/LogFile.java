@@ -515,26 +515,36 @@ public class LogFile {
                 recoveryUndecided = false;
                 // some code goes here
 
+                // print();
+
                 // 1. get the last checkpoint record/start of log file
                 raf.seek(0);
                 long checkPointPointer = raf.readLong();
                 long currentRecordOffset = LONG_SIZE;
+                Set<Long> transactionToRollback;
                 if (checkPointPointer != -1) {
                     // if there is checkpoint
                     raf.seek(checkPointPointer);
                     currentRecordOffset = checkPointPointer;
+                    reconstructTidToFirstLogRecord(checkPointPointer);
+                    transactionToRollback = new HashSet<>(tidToFirstLogRecord.keySet());
+                } else {
+                    transactionToRollback = new HashSet<>();
                 }
 
                 // 2. reconstruct the tidToFirstLogRecord map(no need to do it here) &  figure out the loser transactions.
-                Set<Long> transactionToRollback = tidToFirstLogRecord.keySet();
+
                 while (true) {
                     try {
                         int logType = raf.readInt();
                         if (logType > CHECKPOINT_RECORD || logType < ABORT_RECORD) {
                             throw new RuntimeException("Not supported log record type: " + logType);
                         }
-
-                        if (logType == COMMIT_RECORD || logType == ABORT_RECORD) {
+                        if (logType == BEGIN_RECORD) {
+                            long logTxID = raf.readLong();
+                            transactionToRollback.add(logTxID);
+                            tidToFirstLogRecord.put(logTxID, raf.getFilePointer() + LONG_SIZE);
+                        } else if (logType == COMMIT_RECORD || logType == ABORT_RECORD) {
                             long logTxID = raf.readLong();
                             transactionToRollback.remove(logTxID);
                         }
@@ -549,7 +559,12 @@ public class LogFile {
                 for (Long txID : transactionToRollback) {
                     logAbort(new TransactionId(txID));
                 }
-             }
+
+                // System.out.println("===============================================");
+                // System.out.println("===============================================");
+                // System.out.println("===============================================");
+                // print();
+            }
          }
     }
 
@@ -666,5 +681,22 @@ public class LogFile {
         }
 
         return ret;
+    }
+
+    private void reconstructTidToFirstLogRecord(long checkpointPointer) {
+        long pointerBefore;
+        try {
+            pointerBefore = raf.getFilePointer();
+            raf.seek(checkpointPointer);
+            raf.readInt();
+            raf.readLong();
+            int txNumber = raf.readInt();
+            for (int i = 0; i < txNumber; i++) {
+                tidToFirstLogRecord.put(raf.readLong(), raf.readLong());
+            }
+            raf.seek(pointerBefore);
+        } catch (IOException e) {
+            throw new RuntimeException();
+        }
     }
 }
