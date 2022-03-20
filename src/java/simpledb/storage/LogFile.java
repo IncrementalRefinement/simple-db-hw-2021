@@ -514,7 +514,42 @@ public class LogFile {
             synchronized (this) {
                 recoveryUndecided = false;
                 // some code goes here
-            }
+
+                // 1. get the last checkpoint record/start of log file
+                raf.seek(0);
+                long checkPointPointer = raf.readLong();
+                long currentRecordOffset = LONG_SIZE;
+                if (checkPointPointer != -1) {
+                    // if there is checkpoint
+                    raf.seek(checkPointPointer);
+                    currentRecordOffset = checkPointPointer;
+                }
+
+                // 2. reconstruct the tidToFirstLogRecord map(no need to do it here) &  figure out the loser transactions.
+                Set<Long> transactionToRollback = tidToFirstLogRecord.keySet();
+                while (true) {
+                    try {
+                        int logType = raf.readInt();
+                        if (logType > CHECKPOINT_RECORD || logType < ABORT_RECORD) {
+                            throw new RuntimeException("Not supported log record type: " + logType);
+                        }
+
+                        if (logType == COMMIT_RECORD || logType == ABORT_RECORD) {
+                            long logTxID = raf.readLong();
+                            transactionToRollback.remove(logTxID);
+                        }
+                        currentRecordOffset = getNextRecordBeginOffset(currentRecordOffset);
+                        raf.seek(currentRecordOffset);
+                    } catch (EOFException e) {
+                        break;
+                    }
+                }
+
+                // 3. rollback the loser transactions
+                for (Long txID : transactionToRollback) {
+                    logAbort(new TransactionId(txID));
+                }
+             }
          }
     }
 
@@ -598,7 +633,7 @@ public class LogFile {
         raf.getChannel().force(true);
     }
 
-    // return the offset of the next tuple
+    // return the offset of the next record
     private long getNextRecordBeginOffset(long currentRecordOffset) throws IOException {
         long ret;
         try {
